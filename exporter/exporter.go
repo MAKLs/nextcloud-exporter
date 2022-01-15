@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// NCExporter collects server info from Nextcloud.
 type NCExporter struct {
 	client         client.Client
 	lock           sync.Mutex
@@ -21,6 +22,7 @@ type NCExporter struct {
 	filterMetrics  []string
 }
 
+// NewNCExporter creates a new Exporter instance.
 func NewNCExporter(client client.Client, excludePHP bool, excludeStrings bool, filterMetrics []string) *NCExporter {
 	return &NCExporter{
 		client:         client,
@@ -37,6 +39,7 @@ func (col *NCExporter) fetchNCServerInfo() (*models.NCServerInfo, error) {
 	return col.client.FetchNCServerInfo()
 }
 
+// Collect fetches the server info from Nextcloud and exposes it as metrics.
 func (col *NCExporter) Collect(ch chan<- prometheus.Metric) {
 	col.lock.Lock()
 	defer col.lock.Unlock()
@@ -56,6 +59,7 @@ func (col *NCExporter) Collect(ch chan<- prometheus.Metric) {
 	metrics.ScrapeCount.Collect(ch)
 }
 
+// Describe describes the metrics collected by this exporter.
 func (col *NCExporter) Describe(ch chan<- *prometheus.Desc) {
 	metrics.MetricsCollection.Describe(ch)
 

@@ -14,25 +14,28 @@ import (
 
 const (
 	authHeader = "NC-Token"
-	ncApi      = "/ocs/v2.php/apps/serverinfo/api/v1/info?format=json"
+	ncAPI      = "/ocs/v2.php/apps/serverinfo/api/v1/info?format=json"
 )
 
+// Client interface for interacting with Nextcloud.
 type Client interface {
 	FetchNCServerInfo() (*models.NCServerInfo, error)
 }
 
+// NCClient fetches server info from a real Nextcloud instance.
 type NCClient struct {
 	httpClient *http.Client
 	url        *url.URL
 	token      string
 }
 
-func NewNCClient(baseUrl *url.URL, token string) *NCClient {
+// NewNCClient constructs a new NCClient instance.
+func NewNCClient(baseURL *url.URL, token string) *NCClient {
 	client := http.DefaultClient
-	if apiUrl, err := baseUrl.Parse(ncApi); err != nil {
+	if apiURL, err := baseURL.Parse(ncAPI); err != nil {
 		panic(fmt.Sprintf("failed to parse URL: %v", err))
 	} else {
-		return &NCClient{httpClient: client, url: apiUrl, token: token}
+		return &NCClient{httpClient: client, url: apiURL, token: token}
 	}
 }
 
@@ -47,6 +50,7 @@ func (c *NCClient) prepareRequest() (*http.Request, error) {
 	return req, nil
 }
 
+// FetchNCServerInfo fetches server info from Nextcloud.
 func (c *NCClient) FetchNCServerInfo() (*models.NCServerInfo, error) {
 	req, err := c.prepareRequest()
 	if err != nil {
