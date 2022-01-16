@@ -15,20 +15,18 @@ import (
 
 // NCExporter collects server info from Nextcloud.
 type NCExporter struct {
-	client         client.Client
-	lock           sync.Mutex
-	excludePHP     bool
-	excludeStrings bool
-	filterMetrics  []string
+	client        client.Client
+	lock          sync.Mutex
+	excludePHP    bool
+	filterMetrics []string
 }
 
 // NewNCExporter creates a new Exporter instance.
-func NewNCExporter(client client.Client, excludePHP bool, excludeStrings bool, filterMetrics []string) *NCExporter {
+func NewNCExporter(client client.Client, excludePHP bool, filterMetrics []string) *NCExporter {
 	return &NCExporter{
-		client:         client,
-		excludePHP:     excludePHP,
-		excludeStrings: excludeStrings,
-		filterMetrics:  filterMetrics,
+		client:        client,
+		excludePHP:    excludePHP,
+		filterMetrics: filterMetrics,
 	}
 }
 
@@ -76,7 +74,7 @@ func (col *NCExporter) shouldSkipMetric(name string, metricKind reflect.Kind) bo
 			}
 		}
 		return false
-	}() || (metricKind == reflect.String && col.excludeStrings)
+	}()
 }
 
 func (col *NCExporter) mustCollectTaggedMetrics(v interface{}, ch chan<- prometheus.Metric) error {

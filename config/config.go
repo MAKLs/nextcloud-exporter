@@ -20,23 +20,21 @@ var (
 	exporterConfig *Config
 	configPaths    = []string{"."}
 	defaults       = map[string]interface{}{
-		"port":            9205,
-		"token":           "",
-		"url":             "http://localhost/",
-		"exclude_php":     false,
-		"exclude_strings": false,
-		"filter":          []string{},
+		"port":        9205,
+		"token":       "",
+		"url":         "http://localhost/",
+		"exclude_php": false,
+		"filter":      []string{},
 	}
 )
 
 // Config stores exporter configuration values.
 type Config struct {
-	Port           uint     `mapstructure:"port"`            // Port that the exporter listens on
-	URL            url.URL  `mapstructure:"url"`             // Base URL of the Nextcloud instance to target
-	Token          string   `mapstructure:"token"`           // Token to authenticate to Nextcloud with
-	FilterMetrics  []string `mapstructure:"filter"`          // Metric names to filer from collection
-	ExcludePHP     bool     `mapstructure:"exclude_php"`     // Exclude PHP related metrics from collection
-	ExcludeStrings bool     `mapstructure:"exclude_strings"` // Exclude string-type metrics (e.g. version infomration) from collection
+	Port          uint     `mapstructure:"port"`        // Port that the exporter listens on
+	URL           url.URL  `mapstructure:"url"`         // Base URL of the Nextcloud instance to target
+	Token         string   `mapstructure:"token"`       // Token to authenticate to Nextcloud with
+	FilterMetrics []string `mapstructure:"filter"`      // Metric names to filer from collection
+	ExcludePHP    bool     `mapstructure:"exclude_php"` // Exclude PHP related metrics from collection
 }
 
 // Notify registers the input channel for changes to exporter configuration after unmarshalling the changes.
