@@ -458,11 +458,25 @@ type MetricTemplateCollection struct {
 	templates map[string]MetricTemplate
 }
 
-// Describe sends the Description of every template in the collection to the provided channel.
-func (col *MetricTemplateCollection) Describe(ch chan<- *prometheus.Desc) {
-	for _, template := range col.templates {
-		ch <- template.Desc
-	}
+// MetricTemplateCollectionItem represents an item in the global metrics template collection.
+//
+// Each item contains the iternal key of the metric in the collection and the template needed to generate the metric.
+type MetricTemplateCollectionItem struct {
+	Key      string
+	Template *MetricTemplate
+}
+
+// Iter returns a channel that receives a MetricTemplateCollectionItem for each metric template in the collection.
+func (col *MetricTemplateCollection) Iter() <-chan MetricTemplateCollectionItem {
+	// TODO: any other way to emulate iterators?
+	ch := make(chan MetricTemplateCollectionItem)
+	go func() {
+		defer close(ch)
+		for metricKey, metricTemplate := range col.templates {
+			ch <- MetricTemplateCollectionItem{Key: metricKey, Template: &metricTemplate}
+		}
+	}()
+	return ch
 }
 
 func (col *MetricTemplateCollection) mustAddTemplate(key string, template MetricTemplate) {

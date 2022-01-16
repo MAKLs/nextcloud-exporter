@@ -69,14 +69,20 @@ func (col *NCExporter) Collect(ch chan<- prometheus.Metric) {
 
 // Describe describes the metrics collected by this exporter.
 func (col *NCExporter) Describe(ch chan<- *prometheus.Desc) {
-	metrics.MetricsCollection.Describe(ch)
+	// Nextcloud metrics
+	for item := range metrics.MetricsCollection.Iter() {
+		if !col.shouldSkipMetric(item.Key) {
+			ch <- item.Template.Desc
+		}
+	}
 
+	// Exporter metrics
 	metrics.ScrapeCount.Describe(ch)
 	metrics.ScrapeDuration.Describe(ch)
 	metrics.NcUp.Describe(ch)
 }
 
-func (col *NCExporter) shouldSkipMetric(name string, metricKind reflect.Kind) bool {
+func (col *NCExporter) shouldSkipMetric(name string) bool {
 	return (strings.HasPrefix(name, "php") && col.excludePHP) || func() bool {
 		for _, filter := range col.filterMetrics {
 			if strings.Compare(filter, prometheus.BuildFQName(metrics.Namespace, "", name)) == 0 {
@@ -113,7 +119,7 @@ func (col *NCExporter) collectTaggedMetrics(v interface{}, ch chan<- prometheus.
 		if fieldKind == reflect.Struct {
 			// Recurse through nested structs
 			col.collectTaggedMetrics(field.Interface(), ch)
-		} else if metricName, ok := val.Type().Field(fi).Tag.Lookup(metrics.MetricTag); ok && !col.shouldSkipMetric(metricName, fieldKind) {
+		} else if metricName, ok := val.Type().Field(fi).Tag.Lookup(metrics.MetricTag); ok && !col.shouldSkipMetric(metricName) {
 			// If field is tagged with a metric, collect it.
 			// A metric label is optional.
 			labelValues := make([]string, 0)
