@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,10 +12,10 @@ import (
 
 	"github.com/MAKLs/nextcloud-exporter/client"
 	"github.com/MAKLs/nextcloud-exporter/config"
+	"github.com/MAKLs/nextcloud-exporter/controllers"
 	"github.com/MAKLs/nextcloud-exporter/exporter"
 	"github.com/MAKLs/nextcloud-exporter/metrics"
 	"github.com/fsnotify/fsnotify"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -28,23 +27,6 @@ var (
 	ncExporter *exporter.NCExporter
 	mux        *http.ServeMux
 )
-
-func healthz() http.Handler {
-	health := struct {
-		Status string `json:"status"`
-	}{Status: "UP"}
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := json.Marshal(health)
-		if err != nil {
-			log.Fatalf("failed to serialize health status: %s", err)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write(body)
-	})
-}
 
 func stop(serverChan <-chan *http.Server, errorChan chan<- error) {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -88,8 +70,8 @@ func main() {
 
 	// Prepare endpoints
 	mux = http.NewServeMux()
-	mux.Handle("/healthz", healthz())
-	mux.Handle("/metrics", promhttp.HandlerFor(metrics.ExporterRegistry, promhttp.HandlerOpts{}))
+	mux.Handle("/healthz", controllers.HealthController())
+	mux.Handle("/metrics", controllers.MetricsController())
 
 	// Initial start
 	go start(serverChan, errorChan)
