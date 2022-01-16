@@ -37,14 +37,12 @@ func stop(serverChan <-chan *http.Server, errorChan chan<- error) {
 	server := <-serverChan
 	log.Println("stopping server")
 	errorChan <- server.Shutdown(ctx)
-	ncRegistry.Unregister(ncExporter)
 }
 
 func start(serverChan chan<- *http.Server, errorChan chan<- error) {
 	appConfig := config.GetConfig()
 	ncClient := client.NewNCClient(&appConfig.URL, appConfig.Token)
-	ncExporter = exporter.NewNCExporter(ncClient, appConfig.ExcludePHP, appConfig.FilterMetrics)
-	ncRegistry.MustRegister(ncExporter)
+	exporter.ConfigureExporter(ncClient, appConfig.ExcludePHP, appConfig.FilterMetrics)
 	server := &http.Server{Handler: mux, Addr: fmt.Sprintf(":%d", appConfig.Port)}
 	serverChan <- server
 	log.Printf("starting server at :%d", appConfig.Port)

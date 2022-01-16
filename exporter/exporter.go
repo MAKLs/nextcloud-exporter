@@ -13,6 +13,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+var exporter *NCExporter
+
+func init() {
+	exporter = &NCExporter{}
+	metrics.ExporterRegistry.MustRegister(exporter)
+}
+
 // NCExporter collects server info from Nextcloud.
 type NCExporter struct {
 	client        client.Client
@@ -21,13 +28,16 @@ type NCExporter struct {
 	filterMetrics []string
 }
 
-// NewNCExporter creates a new Exporter instance.
-func NewNCExporter(client client.Client, excludePHP bool, filterMetrics []string) *NCExporter {
-	return &NCExporter{
-		client:        client,
-		excludePHP:    excludePHP,
-		filterMetrics: filterMetrics,
-	}
+// GetExporter returns the global exporter.
+func GetExporter() *NCExporter {
+	return exporter
+}
+
+// ConfigureExporter updates the exporter's configuration with the provided values.
+func ConfigureExporter(client client.Client, excludePHP bool, filterMetrics []string) {
+	exporter.client = client
+	exporter.excludePHP = excludePHP
+	exporter.filterMetrics = filterMetrics
 }
 
 // Wrapper around `NCClient` to time duration of requests to Nextcloud
