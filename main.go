@@ -2,63 +2,24 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/MAKLs/nextcloud-exporter/client"
 	"github.com/MAKLs/nextcloud-exporter/config"
 	"github.com/MAKLs/nextcloud-exporter/controllers"
 	"github.com/MAKLs/nextcloud-exporter/exporter"
-	"github.com/MAKLs/nextcloud-exporter/metrics"
 	"github.com/fsnotify/fsnotify"
 )
-
-const (
-	shutdownTimeout = 5 * time.Second
-)
-
-var (
-	ncRegistry = metrics.ExporterRegistry
-	ncExporter *exporter.NCExporter
-	mux        *http.ServeMux
-)
-
-func stop(serverChan <-chan *http.Server, errorChan chan<- error) {
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer func() {
-		cancel()
-	}()
-
-	server := <-serverChan
-	log.Println("stopping server")
-	errorChan <- server.Shutdown(ctx)
-}
-
-func start(serverChan chan<- *http.Server, errorChan chan<- error) {
-	appConfig := config.GetConfig()
-	ncClient := client.NewNCClient(&appConfig.URL, appConfig.Token)
-	exporter.ConfigureExporter(ncClient, appConfig.ExcludePHP, appConfig.FilterMetrics)
-	server := &http.Server{Handler: mux, Addr: fmt.Sprintf(":%d", appConfig.Port)}
-	serverChan <- server
-	log.Printf("starting server at :%d", appConfig.Port)
-	errorChan <- server.ListenAndServe()
-}
-
-func restart(serverChan chan *http.Server, errorChan chan error) {
-	stop(serverChan, errorChan)
-	start(serverChan, errorChan)
-}
 
 func main() {
 	// Prepare channels
 	serverChan := make(chan *http.Server, 1)
 	reloadChan := make(chan fsnotify.Event)
-	// Buffer for 1 start and 1 shutdown error so shutdown and reload signals aren't blocked
+	// Starting and stopping server ALWAYS returns an error, so
+	// buffer for 1 start and 1 shutdown error; otherwise, reading will be blocked
 	errorChan := make(chan error, 2)
 	shutdownChan := make(chan os.Signal, 1)
 	doneChan := make(chan bool)
@@ -67,12 +28,12 @@ func main() {
 	signal.Notify(shutdownChan, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
 	// Prepare endpoints
-	mux = http.NewServeMux()
+	mux := http.NewServeMux()
 	mux.Handle("/healthz", controllers.HealthController())
 	mux.Handle("/metrics", controllers.MetricsController())
 
 	// Initial start
-	go start(serverChan, errorChan)
+	go exporter.Start(mux, serverChan, errorChan)
 
 	go func() {
 		for {
@@ -80,14 +41,14 @@ func main() {
 			// Watch for config changes to reload exporter
 			case ev := <-reloadChan:
 				log.Printf("detected %s to config \"%s\", restarting", ev.Op, ev.Name)
-				go restart(serverChan, errorChan)
-			// Watch for non-recoverable errors
+				go exporter.Restart(mux, serverChan, errorChan)
+			// Watch for unrecoverable errors
 			case err := <-errorChan:
 				switch err {
 				case nil:
 				case http.ErrServerClosed:
 				case context.DeadlineExceeded:
-					log.Printf("failed to stop server within deadline (%d s)", shutdownTimeout)
+					log.Printf("failed to stop server")
 				default:
 					log.Printf("unexpected error: %v", err)
 					close(doneChan)
@@ -95,7 +56,7 @@ func main() {
 			// Watch for shutdown signals
 			case <-shutdownChan:
 				log.Println("received SIGINT")
-				stop(serverChan, errorChan)
+				exporter.Stop(serverChan, errorChan)
 				doneChan <- true
 			}
 		}
