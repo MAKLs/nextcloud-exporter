@@ -7,21 +7,27 @@ import (
 )
 
 const (
+	// Namespace for exported metrics in Prometheus.
 	Namespace         = "nextcloud"
 	exporterSubsystem = "exporter"
-	MetricTag         = "metric"
-	LabelValueTag     = "label"
+	// MetricTag tags struct fields to be exported as metrics.
+	MetricTag = "metric"
+	// LabelValueTag tags struct fields to be used as label values in exported metrics.
+	LabelValueTag = "label"
 )
 
 var (
-	ExporterRegistry  *prometheus.Registry      = prometheus.NewRegistry()
-	MetricsCollection *MetricTemplateCollection = &MetricTemplateCollection{templates: make(map[string]metricTemplate)}
+	// ExporterRegistry is the Prometheus registry from which metrics are gathered.
+	ExporterRegistry *prometheus.Registry = prometheus.NewRegistry()
+	// MetricsStore stores templates to create metrics for Nextcloud server info.
+	MetricsStore *MetricTemplateStore = &MetricTemplateStore{templates: make(map[string]MetricTemplate)}
 )
 
 func init() {
+	// Populate metrics store
 	for name, metricInfo := range ncMetrics {
 		template := newMetricTemplate(name, metricInfo.help, metricInfo.valueType, metricInfo.variableLabels, metricInfo.constLabels)
-		MetricsCollection.mustAddTemplate(name, template)
+		MetricsStore.mustAddTemplate(name, template)
 	}
 }
 
@@ -441,22 +447,40 @@ var ncMetrics = map[string]struct {
 	},
 }
 
-type metricTemplate struct {
-	Desc      *prometheus.Desc
-	ValueType prometheus.ValueType
+// MetricTemplate stores metadata for a metric exported by the exporter.
+// It is useful for generating fixed-value metrics with prometheus.NewConstMetric.
+type MetricTemplate struct {
+	Desc      *prometheus.Desc     // Description given to metrics generated with this template
+	ValueType prometheus.ValueType // Value type of metrics generate with this template
 }
 
-type MetricTemplateCollection struct {
-	templates map[string]metricTemplate
+// MetricTemplateStore is the collection of all MetricTemplates exported by the exporter.
+type MetricTemplateStore struct {
+	templates map[string]MetricTemplate
 }
 
-func (col *MetricTemplateCollection) Describe(ch chan<- *prometheus.Desc) {
-	for _, template := range col.templates {
-		ch <- template.Desc
-	}
+// MetricTemplateStoreItem represents an item in the global metrics template collection.
+//
+// Each item contains the iternal key of the metric in the collection and the template needed to generate the metric.
+type MetricTemplateStoreItem struct {
+	Key      string
+	Template *MetricTemplate
 }
 
-func (store *MetricTemplateCollection) mustAddTemplate(key string, template metricTemplate) {
+// Iter returns a channel that receives a MetricTemplateCollectionItem for each metric template in the collection.
+func (store *MetricTemplateStore) Iter() <-chan MetricTemplateStoreItem {
+	// TODO: any other way to emulate iterators?
+	ch := make(chan MetricTemplateStoreItem)
+	go func() {
+		defer close(ch)
+		for metricKey, metricTemplate := range store.templates {
+			ch <- MetricTemplateStoreItem{Key: metricKey, Template: &metricTemplate}
+		}
+	}()
+	return ch
+}
+
+func (store *MetricTemplateStore) mustAddTemplate(key string, template MetricTemplate) {
 	if _, ok := store.templates[key]; !ok {
 		// Template not present... add it
 		store.templates[key] = template
@@ -466,19 +490,23 @@ func (store *MetricTemplateCollection) mustAddTemplate(key string, template metr
 	}
 }
 
-func (store *MetricTemplateCollection) WithName(name string) (metricTemplate, bool) {
+// WithName returns the metric template from the collection with the given name.
+// If no such template exists, returns false.
+func (store *MetricTemplateStore) WithName(name string) (MetricTemplate, bool) {
 	template, ok := store.templates[name]
 	return template, ok
 }
 
-func newMetricTemplate(name string, help string, valueType prometheus.ValueType, variableLabels []string, constLabels prometheus.Labels) metricTemplate {
+func newMetricTemplate(name string, help string, valueType prometheus.ValueType, variableLabels []string, constLabels prometheus.Labels) MetricTemplate {
 	fqName := prometheus.BuildFQName(Namespace, "", name)
-	return metricTemplate{
+	return MetricTemplate{
 		Desc:      prometheus.NewDesc(fqName, help, variableLabels, constLabels),
 		ValueType: valueType,
 	}
 }
 
-func (template *metricTemplate) MustEmitMetric(value float64, labelValues ...string) prometheus.Metric {
+// MustEmitMetric generates a fixed-value metric from the provided value and labelValues.
+// Panics if the metric cannot be generated.
+func (template *MetricTemplate) MustEmitMetric(value float64, labelValues ...string) prometheus.Metric {
 	return prometheus.MustNewConstMetric(template.Desc, template.ValueType, value, labelValues...)
 }

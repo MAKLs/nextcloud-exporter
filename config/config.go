@@ -20,24 +20,24 @@ var (
 	exporterConfig *Config
 	configPaths    = []string{"."}
 	defaults       = map[string]interface{}{
-		"port":            9205,
-		"token":           "",
-		"url":             "http://localhost/",
-		"exclude_php":     false,
-		"exclude_strings": false,
-		"filter":          []string{},
+		"port":        9205,
+		"token":       "",
+		"url":         "http://localhost/",
+		"exclude_php": false,
+		"filter":      []string{},
 	}
 )
 
+// Config stores exporter configuration values.
 type Config struct {
-	Port           uint     `mapstructure:"port"`
-	Url            url.URL  `mapstructure:"url"`
-	Token          string   `mapstructure:"token"`
-	FilterMetrics  []string `mapstructure:"filter"`
-	ExcludePHP     bool     `mapstructure:"exclude_php"`
-	ExcludeStrings bool     `mapstructure:"exclude_strings"`
+	Port          uint     `mapstructure:"port"`        // Port that the exporter listens on
+	URL           url.URL  `mapstructure:"url"`         // Base URL of the Nextcloud instance to target
+	Token         string   `mapstructure:"token"`       // Token to authenticate to Nextcloud with
+	FilterMetrics []string `mapstructure:"filter"`      // Metric names to filer from collection
+	ExcludePHP    bool     `mapstructure:"exclude_php"` // Exclude PHP related metrics from collection
 }
 
+// Notify registers the input channel for changes to exporter configuration after unmarshalling the changes.
 func Notify(ch chan<- fsnotify.Event) {
 	viper.OnConfigChange(func(in fsnotify.Event) {
 		mustUnmarshalConfig()
@@ -45,6 +45,7 @@ func Notify(ch chan<- fsnotify.Event) {
 	})
 }
 
+// GetConfig gets the current exporter configuration.
 func GetConfig() *Config {
 	return exporterConfig
 }

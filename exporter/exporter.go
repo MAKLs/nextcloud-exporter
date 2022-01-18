@@ -13,21 +13,31 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type NCExporter struct {
-	client         client.Client
-	lock           sync.Mutex
-	excludePHP     bool
-	excludeStrings bool
-	filterMetrics  []string
+var exporter *NCExporter
+
+func init() {
+	exporter = &NCExporter{}
+	metrics.ExporterRegistry.MustRegister(exporter)
 }
 
-func NewNCExporter(client client.Client, excludePHP bool, excludeStrings bool, filterMetrics []string) *NCExporter {
-	return &NCExporter{
-		client:         client,
-		excludePHP:     excludePHP,
-		excludeStrings: excludeStrings,
-		filterMetrics:  filterMetrics,
-	}
+// NCExporter collects server info from Nextcloud.
+type NCExporter struct {
+	client        client.Client
+	lock          sync.Mutex
+	excludePHP    bool
+	filterMetrics []string
+}
+
+// GetExporter returns the global exporter.
+func GetExporter() *NCExporter {
+	return exporter
+}
+
+// ConfigureExporter updates the exporter's configuration with the provided values.
+func ConfigureExporter(client client.Client, excludePHP bool, filterMetrics []string) {
+	exporter.client = client
+	exporter.excludePHP = excludePHP
+	exporter.filterMetrics = filterMetrics
 }
 
 // Wrapper around `NCClient` to time duration of requests to Nextcloud
@@ -37,6 +47,7 @@ func (col *NCExporter) fetchNCServerInfo() (*models.NCServerInfo, error) {
 	return col.client.FetchNCServerInfo()
 }
 
+// Collect fetches the server info from Nextcloud and exposes it as metrics.
 func (col *NCExporter) Collect(ch chan<- prometheus.Metric) {
 	col.lock.Lock()
 	defer col.lock.Unlock()
@@ -56,15 +67,22 @@ func (col *NCExporter) Collect(ch chan<- prometheus.Metric) {
 	metrics.ScrapeCount.Collect(ch)
 }
 
+// Describe describes the metrics collected by this exporter.
 func (col *NCExporter) Describe(ch chan<- *prometheus.Desc) {
-	metrics.MetricsCollection.Describe(ch)
+	// Nextcloud metrics
+	for item := range metrics.MetricsStore.Iter() {
+		if !col.shouldSkipMetric(item.Key) {
+			ch <- item.Template.Desc
+		}
+	}
 
+	// Exporter metrics
 	metrics.ScrapeCount.Describe(ch)
 	metrics.ScrapeDuration.Describe(ch)
 	metrics.NcUp.Describe(ch)
 }
 
-func (col *NCExporter) shouldSkipMetric(name string, metricKind reflect.Kind) bool {
+func (col *NCExporter) shouldSkipMetric(name string) bool {
 	return (strings.HasPrefix(name, "php") && col.excludePHP) || func() bool {
 		for _, filter := range col.filterMetrics {
 			if strings.Compare(filter, prometheus.BuildFQName(metrics.Namespace, "", name)) == 0 {
@@ -72,7 +90,7 @@ func (col *NCExporter) shouldSkipMetric(name string, metricKind reflect.Kind) bo
 			}
 		}
 		return false
-	}() || (metricKind == reflect.String && col.excludeStrings)
+	}()
 }
 
 func (col *NCExporter) mustCollectTaggedMetrics(v interface{}, ch chan<- prometheus.Metric) error {
@@ -101,7 +119,7 @@ func (col *NCExporter) collectTaggedMetrics(v interface{}, ch chan<- prometheus.
 		if fieldKind == reflect.Struct {
 			// Recurse through nested structs
 			col.collectTaggedMetrics(field.Interface(), ch)
-		} else if metricName, ok := val.Type().Field(fi).Tag.Lookup(metrics.MetricTag); ok && !col.shouldSkipMetric(metricName, fieldKind) {
+		} else if metricName, ok := val.Type().Field(fi).Tag.Lookup(metrics.MetricTag); ok && !col.shouldSkipMetric(metricName) {
 			// If field is tagged with a metric, collect it.
 			// A metric label is optional.
 			labelValues := make([]string, 0)
@@ -109,7 +127,7 @@ func (col *NCExporter) collectTaggedMetrics(v interface{}, ch chan<- prometheus.
 				labelValues = append(labelValues, label)
 			}
 
-			if metricTemplate, ok := metrics.MetricsCollection.WithName(metricName); ok {
+			if metricTemplate, ok := metrics.MetricsStore.WithName(metricName); ok {
 				switch fieldKind {
 				case reflect.Float64:
 					ch <- metricTemplate.MustEmitMetric(field.Float(), labelValues...)
