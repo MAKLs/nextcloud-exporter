@@ -70,7 +70,7 @@ func (col *NCExporter) Collect(ch chan<- prometheus.Metric) {
 // Describe describes the metrics collected by this exporter.
 func (col *NCExporter) Describe(ch chan<- *prometheus.Desc) {
 	// Nextcloud metrics
-	for item := range metrics.MetricsCollection.Iter() {
+	for item := range metrics.MetricsStore.Iter() {
 		if !col.shouldSkipMetric(item.Key) {
 			ch <- item.Template.Desc
 		}
@@ -127,7 +127,7 @@ func (col *NCExporter) collectTaggedMetrics(v interface{}, ch chan<- prometheus.
 				labelValues = append(labelValues, label)
 			}
 
-			if metricTemplate, ok := metrics.MetricsCollection.WithName(metricName); ok {
+			if metricTemplate, ok := metrics.MetricsStore.WithName(metricName); ok {
 				switch fieldKind {
 				case reflect.Float64:
 					ch <- metricTemplate.MustEmitMetric(field.Float(), labelValues...)

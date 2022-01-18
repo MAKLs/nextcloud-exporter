@@ -19,14 +19,15 @@ const (
 var (
 	// ExporterRegistry is the Prometheus registry from which metrics are gathered.
 	ExporterRegistry *prometheus.Registry = prometheus.NewRegistry()
-	// MetricsCollection is the collection of Nextcloud info that is exported as metrics.
-	MetricsCollection *MetricTemplateCollection = &MetricTemplateCollection{templates: make(map[string]MetricTemplate)}
+	// MetricsStore stores templates to create metrics for Nextcloud server info.
+	MetricsStore *MetricTemplateStore = &MetricTemplateStore{templates: make(map[string]MetricTemplate)}
 )
 
 func init() {
+	// Populate metrics store
 	for name, metricInfo := range ncMetrics {
 		template := newMetricTemplate(name, metricInfo.help, metricInfo.valueType, metricInfo.variableLabels, metricInfo.constLabels)
-		MetricsCollection.mustAddTemplate(name, template)
+		MetricsStore.mustAddTemplate(name, template)
 	}
 }
 
@@ -453,36 +454,36 @@ type MetricTemplate struct {
 	ValueType prometheus.ValueType // Value type of metrics generate with this template
 }
 
-// MetricTemplateCollection is the collection of all MetricTemplates exported by the exporter.
-type MetricTemplateCollection struct {
+// MetricTemplateStore is the collection of all MetricTemplates exported by the exporter.
+type MetricTemplateStore struct {
 	templates map[string]MetricTemplate
 }
 
-// MetricTemplateCollectionItem represents an item in the global metrics template collection.
+// MetricTemplateStoreItem represents an item in the global metrics template collection.
 //
 // Each item contains the iternal key of the metric in the collection and the template needed to generate the metric.
-type MetricTemplateCollectionItem struct {
+type MetricTemplateStoreItem struct {
 	Key      string
 	Template *MetricTemplate
 }
 
 // Iter returns a channel that receives a MetricTemplateCollectionItem for each metric template in the collection.
-func (col *MetricTemplateCollection) Iter() <-chan MetricTemplateCollectionItem {
+func (store *MetricTemplateStore) Iter() <-chan MetricTemplateStoreItem {
 	// TODO: any other way to emulate iterators?
-	ch := make(chan MetricTemplateCollectionItem)
+	ch := make(chan MetricTemplateStoreItem)
 	go func() {
 		defer close(ch)
-		for metricKey, metricTemplate := range col.templates {
-			ch <- MetricTemplateCollectionItem{Key: metricKey, Template: &metricTemplate}
+		for metricKey, metricTemplate := range store.templates {
+			ch <- MetricTemplateStoreItem{Key: metricKey, Template: &metricTemplate}
 		}
 	}()
 	return ch
 }
 
-func (col *MetricTemplateCollection) mustAddTemplate(key string, template MetricTemplate) {
-	if _, ok := col.templates[key]; !ok {
+func (store *MetricTemplateStore) mustAddTemplate(key string, template MetricTemplate) {
+	if _, ok := store.templates[key]; !ok {
 		// Template not present... add it
-		col.templates[key] = template
+		store.templates[key] = template
 	} else {
 		// Template already exists with that name
 		panic(fmt.Sprintf("template already exists with key '%s': %v", key, template))
@@ -491,8 +492,8 @@ func (col *MetricTemplateCollection) mustAddTemplate(key string, template Metric
 
 // WithName returns the metric template from the collection with the given name.
 // If no such template exists, returns false.
-func (col *MetricTemplateCollection) WithName(name string) (MetricTemplate, bool) {
-	template, ok := col.templates[name]
+func (store *MetricTemplateStore) WithName(name string) (MetricTemplate, bool) {
+	template, ok := store.templates[name]
 	return template, ok
 }
 
